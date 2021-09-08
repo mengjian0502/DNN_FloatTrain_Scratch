@@ -285,6 +285,7 @@ class BatchNorm(nn.Module):
         # gradient accumulation
         self.w_grad = torch.zeros_like(self.weight).cuda()
         self.b_grad = torch.zeros_like(self.bias).cuda()
+        self.inv_std_grad = 0
     
     def forward(self, input:Tensor):        
         self.input = input.cuda()
@@ -301,13 +302,13 @@ class BatchNorm(nn.Module):
             self.mean = self.running_mean
             self.var = self.running_var
             self.std = torch.sqrt(self.var + self.eps)
-
-        self.xmu = self.input - self.mean[None, :, None, None]
+        
         self.inv_std = 1 / (self.std[None, :, None, None])
-        self.output = self.xmu.mul(self.inv_std)
+        self.xmu = self.input - self.mean[None, :, None, None]
+        self.xhat = self.xmu.mul(self.inv_std)
         
         if self.affine:
-            self.prod = self.output * self.weight[None, :, None, None]
+            self.prod = self.xhat * self.weight[None, :, None, None]
             self.output = self.prod + self.bias[None, :, None, None]
         return self.output
     
@@ -318,6 +319,10 @@ class BatchNorm(nn.Module):
         self.b_grad += output_grad.view(self.bias.size())
         self.w_grad += output_grad.mul(prod_i)
 
+        dxhat = output_grad.mul(self.weight[None, :, None, None])
+        dxmu1 = dxhat.mul(self.inv_std)
+        self.inv_std_grad += dxhat.mul(self.xmu)
+        
         
 
 
