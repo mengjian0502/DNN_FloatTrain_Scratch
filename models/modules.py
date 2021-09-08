@@ -8,6 +8,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch import Tensor
 from qtorch.quant import float_quantize
+from torch.nn import init
 from .function import *
 
 class HWconv2d(nn.Module):
@@ -230,13 +231,12 @@ class FC(nn.Module):
         self.weight -= self.lr * self.w_vel
         self.bias -= self.lr * self.b_vel
         
-        
 
 class MaxPooling(nn.Module):
+    r"""
+    Implementing max pooling with pytorch function
+    """
     def __init__(self, kernel_size, stride):
-        r"""
-        Implementing max pooling with pytorch function
-        """
         super(MaxPooling, self).__init__()
         self.kernel_size = kernel_size
         self.stride = stride
@@ -261,6 +261,65 @@ class MaxPooling(nn.Module):
 
         dpool = maxpoolBackward(out_gradient, input_i, f=self.kernel_size, s=self.stride)
         return dpool
+
+class BatchNorm(nn.Module):
+    def __init__(self, num_features, eps=1e-5, momentum=0.1, affine=True):
+        self.num_features = num_features
+        self.eps = eps
+        self.momentum = momentum
+        self.affine = affine
+        self.training = True
+
+        # running statistics
+        self.running_mean = torch.zeros(num_features)
+        self.running_var = torch.ones(num_features)
+
+        # affine transformation
+        self.weight = torch.Tensor(num_features)
+        self.bias = torch.Tensor(num_features)
+
+        # initialize the weights and bias
+        init.ones_(self.weight)
+        init.zeros_(self.bias)
+
+        # gradient accumulation
+        self.w_grad = torch.zeros_like(self.weight).cuda()
+        self.b_grad = torch.zeros_like(self.bias).cuda()
+    
+    def forward(self, input:Tensor):        
+        self.input = input.cuda()
+        
+        if self.training:
+            self.mean = self.input.mean([0,2,3])
+            self.var = self.input.var([0,2,3])
+            self.std = torch.sqrt(self.var + self.eps)
+
+            # update running statistics
+            self.running_mean = self.momentum * self.mean + (1 - self.momentum) * self.running_mean
+            self.running_var = self.momentum * self.std  + (1 - self.momentum) * self.running_var
+        else:
+            self.mean = self.running_mean
+            self.var = self.running_var
+            self.std = torch.sqrt(self.var + self.eps)
+
+        self.xmu = self.input - self.mean[None, :, None, None]
+        self.inv_std = 1 / (self.std[None, :, None, None])
+        self.output = self.xmu.mul(self.inv_std)
+        
+        if self.affine:
+            self.prod = self.output * self.weight[None, :, None, None]
+            self.output = self.prod + self.bias[None, :, None, None]
+        return self.output
+    
+    def feed_backward(self, output_grad, batch_idx):
+        prod_i = self.prod[batch_idx, :].view(1, -1)
+        
+        # accumulate the gradient along batch dim
+        self.b_grad += output_grad.view(self.bias.size())
+        self.w_grad += output_grad.mul(prod_i)
+
+        
+
 
 
 class MSELoss(nn.Module):
