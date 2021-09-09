@@ -263,12 +263,13 @@ class MaxPooling(nn.Module):
         return dpool
 
 class BatchNorm(nn.Module):
-    def __init__(self, num_features, eps=1e-5, momentum=0.1, affine=True):
+    def __init__(self, num_features, batch_size=128, eps=1e-5, momentum=0.1, affine=True):
         self.num_features = num_features
         self.eps = eps
         self.momentum = momentum
         self.affine = affine
         self.training = True
+        self.batch_size = batch_size
 
         # running statistics
         self.running_mean = torch.zeros(num_features)
@@ -285,7 +286,9 @@ class BatchNorm(nn.Module):
         # gradient accumulation
         self.w_grad = torch.zeros_like(self.weight).cuda()
         self.b_grad = torch.zeros_like(self.bias).cuda()
-        self.inv_std_grad = 0
+        self.mu_grad = 0
+        self.std_grad = 0
+
     
     def forward(self, input:Tensor):        
         self.input = input.cuda()
@@ -318,11 +321,17 @@ class BatchNorm(nn.Module):
         # accumulate the gradient along batch dim
         self.b_grad += output_grad.view(self.bias.size())
         self.w_grad += output_grad.mul(prod_i)
+        dxhat = output_grad.mul(self.weight[None, :, None, None])   # single image gradient
+        dx_centered = dxhat.mul(self.inv_std)
 
-        dxhat = output_grad.mul(self.weight[None, :, None, None])
-        dxmu1 = dxhat.mul(self.inv_std)
-        self.inv_std_grad += dxhat.mul(self.xmu)
+        dmu = -(dx_centered + 2/self.batch_size * self.xmu[batch_idx])
+        dstd = dxhat * self.xmu[batch_idx] * (-self.std**(-2))
         
+        self.mu_grad += dmu
+        self.std_grad += dstd
+
+        dvar = self.std_grad / 2 / self.std
+        dout = dx_centered + (d)
         
 
 
