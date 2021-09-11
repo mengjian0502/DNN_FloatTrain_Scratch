@@ -11,12 +11,12 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import models
-from models.modules import *
+from models import HWconv2d, Conv2d, BatchNorm
 from dataset import get_loader
 
 parser = argparse.ArgumentParser(description='PyTorch Training')
-parser.add_argument('--model', type=str, choices=['cnn_mnist', 'vgg7'], help='model type')
-parser.add_argument('--model_ref', type=str, choices=['cnn_mnist_torch', 'vgg7_torch'], help='reference model type')
+parser.add_argument('--model', type=str, choices=['cnn_mnist', 'vgg7', 'vgg7mixed', 'vgg7BNmixed'], help='model type')
+parser.add_argument('--model_ref', type=str, choices=['cnn_mnist_torch', 'vgg7_torch', 'vgg7bn_torch'], help='reference model type')
 parser.add_argument('--batch_size', type=int, default=64, metavar='N', help='input batch size for training (default: 64)')
 parser.add_argument('--epochs', type=int, default=100, metavar='N', help='number of epochs to train (default: 14)')
 parser.add_argument('--lr', type=float, default=0.1, metavar='LR', help='learning rate (default: 0.1)')
@@ -74,14 +74,22 @@ def main():
     # Calibrate the weights
     with torch.no_grad():
         conv = 0
+        bn=0
         sw_conv_weight = []
         sw_linear_weight = []
         sw_linear_bias = []
+        sw_bn_weight = []
+        sw_bn_bias = []
         for m in model_ref.modules():
             if isinstance(m, nn.Conv2d):
                 sw_conv_weight.append(m.weight.data)
                 print(f"Torch Conv: {m.weight.data.size()} | min = {m.weight.data.min()} | max = {m.weight.data.max()}")
                 conv += 1
+            elif isinstance(m, nn.BatchNorm2d):
+                sw_bn_weight.append(m.weight.data)
+                sw_bn_bias.append(m.bias.data)
+                bn += 1
+                print(f"Torch BN: {m.weight.data.size()} | min = {m.weight.data.min()} | max = {m.weight.data.max()}")
             elif isinstance(m, nn.Linear):
                 sw_linear_weight.append(m.weight.data)
                 sw_linear_bias.append(m.bias.data)
@@ -90,12 +98,18 @@ def main():
 
         hw_conv = 0
         hw_lin = 0
+        hw_bn = 0
         for n in range(len(model.features)):
             f = model.features[n]
-            if isinstance(f, HWconv2d):
+            if isinstance(f, HWconv2d) or isinstance(f, Conv2d):
                 f.weight.data = sw_conv_weight[hw_conv]
                 hw_conv += 1
                 print(f"HW Conv: {f.weight.data.size()} | min = {f.weight.data.min()} | max = {f.weight.data.max()}")
+            elif isinstance(f, BatchNorm):
+                f.weight.data = sw_bn_weight[hw_bn]
+                f.bias.data = sw_bn_bias[hw_bn]
+                hw_bn += 1
+                print(f"HW BN: {f.weight.data.size()} | min = {f.weight.data.min()} | max = {f.weight.data.max()}")
 
         model.fc.weight.data = sw_linear_weight[hw_lin]
         model.fc.bias.data = sw_linear_bias[hw_lin]

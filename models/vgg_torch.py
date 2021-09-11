@@ -79,7 +79,7 @@ cfg = {
 
 
 class VGG(nn.Module):
-    def __init__(self, num_classes=10, depth=16, batch_norm=False):
+    def __init__(self, num_classes=10, depth=16, batch_norm=True):
         super(VGG, self).__init__()
         self.features = make_layers(cfg[depth], batch_norm)
         if depth == 7:
@@ -113,3 +113,8 @@ class vgg7_torch:
     base = VGG
     args = list()
     kwargs={'depth':7, 'batch_norm':False}
+
+class vgg7bn_torch:
+    base = VGG
+    args = list()
+    kwargs={'depth':7, 'batch_norm':True}

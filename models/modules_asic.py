@@ -1,5 +1,7 @@
 """
-Forward pass modules
+DNN Modules for asic chip computation
+
+The gradient accumulation will be performed in a image by image manner (across the entire mini-batch)
 """
 
 import torch
@@ -261,80 +263,6 @@ class MaxPooling(nn.Module):
 
         dpool = maxpoolBackward(out_gradient, input_i, f=self.kernel_size, s=self.stride)
         return dpool
-
-class BatchNorm(nn.Module):
-    def __init__(self, num_features, batch_size=128, eps=1e-5, momentum=0.1, affine=True):
-        self.num_features = num_features
-        self.eps = eps
-        self.momentum = momentum
-        self.affine = affine
-        self.training = True
-        self.batch_size = batch_size
-
-        # running statistics
-        self.running_mean = torch.zeros(num_features)
-        self.running_var = torch.ones(num_features)
-
-        # affine transformation
-        self.weight = torch.Tensor(num_features)
-        self.bias = torch.Tensor(num_features)
-
-        # initialize the weights and bias
-        init.ones_(self.weight)
-        init.zeros_(self.bias)
-
-        # gradient accumulation
-        self.w_grad = torch.zeros_like(self.weight).cuda()
-        self.b_grad = torch.zeros_like(self.bias).cuda()
-        self.mu_grad = 0
-        self.std_grad = 0
-
-    
-    def forward(self, input:Tensor):        
-        self.input = input.cuda()
-        
-        if self.training:
-            self.mean = self.input.mean([0,2,3])
-            self.var = self.input.var([0,2,3])
-            self.std = torch.sqrt(self.var + self.eps)
-
-            # update running statistics
-            self.running_mean = self.momentum * self.mean + (1 - self.momentum) * self.running_mean
-            self.running_var = self.momentum * self.std  + (1 - self.momentum) * self.running_var
-        else:
-            self.mean = self.running_mean
-            self.var = self.running_var
-            self.std = torch.sqrt(self.var + self.eps)
-        
-        self.inv_std = 1 / (self.std[None, :, None, None])
-        self.xmu = self.input - self.mean[None, :, None, None]
-        self.xhat = self.xmu.mul(self.inv_std)
-        
-        if self.affine:
-            self.prod = self.xhat * self.weight[None, :, None, None]
-            self.output = self.prod + self.bias[None, :, None, None]
-        return self.output
-    
-    def feed_backward(self, output_grad, batch_idx):
-        prod_i = self.prod[batch_idx, :].view(1, -1)
-        
-        # accumulate the gradient along batch dim
-        self.b_grad += output_grad.view(self.bias.size())
-        self.w_grad += output_grad.mul(prod_i)
-        dxhat = output_grad.mul(self.weight[None, :, None, None])   # single image gradient
-        dx_centered = dxhat.mul(self.inv_std)
-
-        dmu = -(dx_centered + 2/self.batch_size * self.xmu[batch_idx])
-        dstd = dxhat * self.xmu[batch_idx] * (-self.std**(-2))
-        
-        self.mu_grad += dmu
-        self.std_grad += dstd
-
-        dvar = self.std_grad / 2 / self.std
-        dout = dx_centered + (d)
-        
-
-
 
 class MSELoss(nn.Module):
     def __init__(self, num_classes):

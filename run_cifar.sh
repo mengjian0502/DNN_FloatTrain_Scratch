@@ -1,4 +1,4 @@
-PYTHON="/home/mengjian/anaconda3/bin/python"
+PYTHON="/home/jmeng15/anaconda3/envs/myenv_pc/bin/python"
 
 ############ directory to save result #############
 
@@ -7,8 +7,8 @@ if [ ! -d "$DIRECTORY" ]; then
     mkdir ./dataset
 fi
 
-model=vgg7
-model_ref=vgg7_torch
+model=vgg7BNmixed
+model_ref=vgg7bn_torch
 dataset=cifar10
 epochs=200
 batch_size=128

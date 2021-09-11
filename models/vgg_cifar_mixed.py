@@ -7,7 +7,7 @@ VGG on CIFAR-10
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from .modules import *
+from .modules_mixed import *
 
 
 def make_layers(cfg, lr=0.1, momentum=0.9):
@@ -15,9 +15,9 @@ def make_layers(cfg, lr=0.1, momentum=0.9):
     in_channels = 3
     for v in cfg:
         if v == 'M':
-            layers += [MaxPooling(kernel_size=2, stride=2)]
+            layers += [MaxPool2d(kernel_size=2, stride=2)]
         else:
-            conv2d = HWconv2d(in_channels=in_channels, out_channels=v, kernel_size=3, stride=1, padding=1, lr=lr, momentum=momentum, use_relu=True, relu_inplace=True)
+            conv2d = Conv2d(in_channels=in_channels, out_channels=v, kernel_size=3, stride=1, padding=1, lr=lr, momentum=momentum, use_relu=True, relu_inplace=True)
             layers += [conv2d]
             in_channels = v
     return layers
@@ -29,18 +29,18 @@ cfg = {
          512, 512, 512, 512, 'M'],
 }
 
-class VGG(nn.Module):
+class VGGMixed(nn.Module):
     def __init__(self, num_classes=10, depth=16, lr=0.1, momentum=0.9):
-        super(VGG, self).__init__()
+        super(VGGMixed, self).__init__()
         self.features = make_layers(cfg[depth], lr, momentum)
         self.layers = len(self.features)
 
         self.model = nn.Sequential(*self.features)
         
         if depth == 7:
-            self.fc = FC(in_features=256, out_features=num_classes, bias=True, lr=lr, momentum=momentum)
+            self.fc = Linear(in_features=256, out_features=num_classes, bias=True, lr=lr, momentum=momentum)
         
-        self.loss = MSELoss(num_classes)
+        self.loss = MSE(num_classes)
 
     def feed_forward(self, x, target):
         for ii in range(self.layers):
@@ -54,39 +54,35 @@ class VGG(nn.Module):
         self.fc.zero_grad()
         for jj in range(self.layers):
             module = self.features[self.layers - 1 - jj]
-            if isinstance(module, HWconv2d):
+            if isinstance(module, Conv2d):
                 module.zero_grad()
     
     def feed_backward(self):
         dloss = self.loss.feed_backward()
-        for ii in range(dloss.size(0)):
-            dl_i = dloss[ii, :].view(1, -1)
-            dfc = self.fc.feed_backward(dl_i, batch_idx=ii)
-            grad = dfc
-            for jj in range(self.layers):
-                module = self.features[self.layers - 1 - jj]
-                dout = module.feed_backward(grad, batch_idx=ii)
-                grad = dout
+        dfc = self.fc.feed_backward(dloss)
+        grad = dfc
+        for jj in range(self.layers):
+            module = self.features[self.layers - 1 - jj]
+            dout = module.feed_backward(grad)
+            grad = dout
     
     def weight_update(self):
         self.loss.apply_weight_grad()
         self.fc.weight_update()
-        # print(f"Model: {list(self.fc.w_grad.size())} | grad min: {self.fc.w_grad.min()} | grad max: {self.fc.w_grad.max()}")
         for jj in range(self.layers):
             module = self.features[self.layers - 1 - jj]
-            if isinstance(module, HWconv2d):
+            if isinstance(module, Conv2d):
                 module.weight_update()
-                # print(f"Model: {list(module.w_grad.size())} | grad min: {module.w_grad.min()} | grad max: {module.w_grad.max()}")
 
 
-class vgg7:
-    base = VGG
+class vgg7mixed:
+    base = VGGMixed
     args = list()
     kwargs={'depth':7}
     
 if __name__ == '__main__':
-    model_cfg = vgg7
-    net = vgg7.base(*model_cfg.args, **model_cfg.kwargs).cuda()
+    model_cfg = vgg7mixed
+    net = vgg7mixed.base(*model_cfg.args, **model_cfg.kwargs).cuda()
     net = net.cuda()
     test_x = torch.randn(1,3,32,32).cuda()
     test_y = torch.randn(1,10).cuda()

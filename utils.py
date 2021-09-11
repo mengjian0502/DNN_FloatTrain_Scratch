@@ -8,7 +8,7 @@ import shutil
 import tabulate
 import numpy as np
 import pandas as pd
-from models.modules import HWconv2d
+from models import HWconv2d, Conv2d, BatchNorm
 
 class AverageMeter(object):
     """Computes and stores the average and current value"""
@@ -94,13 +94,18 @@ def train(trainloader, net, net_ref, optimizer, criterion):
         # convolution layer
         for n in range(len(net.features)):
             f = net.features[n]
-            if isinstance(f, HWconv2d):
+            if isinstance(f, HWconv2d) or isinstance(f, Conv2d):
                 grad = f.w_grad
                 print(f"HW Conv Grad: {list(grad.size())} | grad min {grad.min()} | grad max {grad.max()}")
+            
+            if isinstance(f, BatchNorm):
+                print(f"HW BN WGrad: {list(f.w_grad.size())} | grad min {f.w_grad.min()} | grad max {f.w_grad.max()}")
+                print(f"HW BN bGrad: {list(f.b_grad.size())} | grad min {f.b_grad.min()} | grad max {f.b_grad.max()}")
+
         # FC layer
         print(f"HW FC Grad: {net.fc.w_grad.size()} | min = {net.fc.w_grad.min()} | max = {net.fc.w_grad.max()}")
         print(f"HW FC Grad: {net.fc.b_grad.size()} | min = {net.fc.b_grad.min()} | max = {net.fc.b_grad.max()}\n")
-
+        import pdb;pdb.set_trace()
         net.weight_update()
         
         prec1, prec5 = accuracy(outputs.data, targets, topk=(1, 5))
