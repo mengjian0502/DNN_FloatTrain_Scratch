@@ -9,6 +9,7 @@ import tabulate
 import numpy as np
 import pandas as pd
 from models import HWconv2d, Conv2d, BatchNorm
+from utils_func import utils_func
 
 class AverageMeter(object):
     """Computes and stores the average and current value"""
@@ -75,6 +76,7 @@ def train(trainloader, net, net_ref, optimizer, criterion):
 
         net.zero_grad()
         net.feed_backward()
+        net.weight_update()
 
         # # Torch SGD 
         optimizer.zero_grad()
@@ -105,8 +107,8 @@ def train(trainloader, net, net_ref, optimizer, criterion):
         # FC layer
         print(f"HW FC Grad: {net.fc.w_grad.size()} | min = {net.fc.w_grad.min()} | max = {net.fc.w_grad.max()}")
         print(f"HW FC Grad: {net.fc.b_grad.size()} | min = {net.fc.b_grad.min()} | max = {net.fc.b_grad.max()}\n")
+        utils_func.save_params(net)
         import pdb;pdb.set_trace()
-        net.weight_update()
         
         prec1, prec5 = accuracy(outputs.data, targets, topk=(1, 5))
         losses.update(loss.item(), inputs.size(0))

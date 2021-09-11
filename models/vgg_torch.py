@@ -71,7 +71,7 @@ def make_layers(cfg, batch_norm=False):
     return nn.Sequential(*layers)
 
 cfg = {
-    7: [32, 'M', 64, 'M', 128, 'M', 128, 'M', 256, 'M'],
+    7: [32, 'M', 64, 'M', 128, 'M', 128, 'M', 128, 'M'],
     16: [64, 64, 'M', 128, 128, 'M', 256, 256, 256, 'M', 512, 512, 512, 'M', 512, 512, 512, 'M'],
     19: [64, 64, 'M', 128, 128, 'M', 256, 256, 256, 256, 'M', 512, 512, 512, 512, 'M',
          512, 512, 512, 512, 'M'],
@@ -84,7 +84,7 @@ class VGG(nn.Module):
         self.features = make_layers(cfg[depth], batch_norm)
         if depth == 7:
             self.classifier = nn.Sequential(
-                nn.Linear(256, num_classes),
+                nn.Linear(128, num_classes),
             )
         else:
             self.classifier = nn.Sequential(

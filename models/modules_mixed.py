@@ -82,10 +82,11 @@ class Conv2d(nn.Module):
         # low precision floating point
         if self.lp:
             self.weight = float_quantize(self.weight.data, exp=self.w_exp, man=self.w_man, rounding="nearest")
-            if c_in != 3:
-                self.input = float_quantize(self.input, exp=self.x_exp, man=self.x_man, rounding="nearest")
-            else:
-                self.input = self.input 
+            self.input = float_quantize(self.input, exp=self.x_exp, man=self.x_man, rounding="nearest")
+            # if c_in != 3:
+            #     self.input = float_quantize(self.input, exp=self.x_exp, man=self.x_man, rounding="nearest")
+            # else:
+            #     self.input = self.input 
 
         for ii in range(c_iter):
             maskc = torch.zeros_like(self.weight.data)
@@ -109,6 +110,8 @@ class Conv2d(nn.Module):
         self.input = input.cuda()
         # convolution
         self.out = self.conv(self.input)
+        if self.lp:
+            self.out = float_quantize(self.out, exp=self.x_exp, man=self.x_man, rounding="nearest")
         return self.out
     
     def zero_grad(self):
@@ -146,11 +149,11 @@ class Conv2d(nn.Module):
                 output_grad_i_t = output_grad_i.transpose(0,1)
 
                 dwi = F.conv2d(input_i_t, output_grad_i_t, stride=self.stride, padding=self.padding)
-                dw = float_quantize(dw, exp=self.y_exp, man=self.y_man, rounding="nearest")
                 dw += dwi
+                dw = float_quantize(dw, exp=self.y_exp, man=self.y_man, rounding="nearest")
         else:
             dw = F.conv2d(input_i_t, output_grad_t, stride=self.stride, padding=self.padding)
-        
+
         self.w_grad = dw.transpose(0,1)
         return dout
 
@@ -158,6 +161,8 @@ class Conv2d(nn.Module):
         self.w_vel = self.momentum * self.w_vel + self.w_grad
         
         # low precision velocity
+        self.weight_old = self.weight.clone()
+
         if self.lp:
             self.w_vel = float_quantize(self.w_vel, exp=self.g_exp, man=self.g_man, rounding="nearest")
         self.weight -= self.lr * self.w_vel
@@ -217,10 +222,13 @@ class Linear(nn.Module):
         # low precision floating point
         if self.lp:
             self.weight = float_quantize(self.weight.data, exp=self.w_exp, man=self.w_man, rounding="nearest")
+            self.bias = float_quantize(self.bias.data, exp=self.w_exp, man=self.w_man, rounding="nearest")
             self.input = float_quantize(self.input, exp=self.x_exp, man=self.x_man, rounding="nearest")
 
 
         self.out  = F.linear(self.input, self.weight, self.bias)
+        if self.lp:
+            self.out = float_quantize(self.out, exp=self.y_exp, man=self.y_man, rounding="nearest")
         return self.out
     
     def feed_backward(self, out_gradient):
@@ -250,6 +258,9 @@ class Linear(nn.Module):
         self.w_vel = self.momentum * self.w_vel + self.w_grad
         self.b_vel = self.momentum * self.b_vel + self.b_grad
         
+        self.weight_old = self.weight.clone()
+        self.bias_old = self.bias.clone()
+
         self.weight -= self.lr * self.w_vel
         self.bias -= self.lr * self.b_vel
 
@@ -385,6 +396,9 @@ class BatchNorm(nn.Module):
     def weight_update(self):
         self.w_vel = self.momentum * self.w_vel + self.w_grad
         self.b_vel = self.momentum * self.b_vel + self.b_grad
+
+        self.weight_old = self.weight.clone()
+        self.bias_old = self.bias.clone()
 
         self.weight -= self.lr * self.w_vel
         self.bias -= self.lr * self.b_vel

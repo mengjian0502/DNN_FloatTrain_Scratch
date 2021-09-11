@@ -10,14 +10,14 @@ import torch.nn.functional as F
 from .modules_mixed import *
 
 
-def make_layers(cfg, lr=0.1, momentum=0.9):
+def make_layers(cfg, lr=0.1, momentum=0.9, low_precision=True):
     layers = list()
     in_channels = 3
     for v in cfg:
         if v == 'M':
             layers += [MaxPool2d(kernel_size=2, stride=2)]
         else:
-            conv2d = Conv2d(in_channels=in_channels, out_channels=v, kernel_size=3, stride=1, padding=1, lr=lr, momentum=momentum, use_relu=False, relu_inplace=True)
+            conv2d = Conv2d(in_channels=in_channels, out_channels=v, kernel_size=3, stride=1, padding=1, lr=lr, momentum=momentum, use_relu=False, relu_inplace=True, low_precision=low_precision)
             bn = BatchNorm(num_features=v, batch_size=128, lr=lr, momentum=momentum, use_relu=True, relu_inplace=True)
             relu = ReLU(inplace=True)
             layers += [conv2d, bn, relu]
@@ -25,14 +25,14 @@ def make_layers(cfg, lr=0.1, momentum=0.9):
     return layers
 
 cfg = {
-    7: [32, 'M', 64, 'M', 128, 'M', 128, 'M', 256, 'M'],
+    7: [32, 'M', 64, 'M', 128, 'M', 128, 'M', 128, 'M'],
     16: [64, 64, 'M', 128, 128, 'M', 256, 256, 256, 'M', 512, 512, 512, 'M', 512, 512, 512, 'M'],
     19: [64, 64, 'M', 128, 128, 'M', 256, 256, 256, 256, 'M', 512, 512, 512, 512, 'M',
          512, 512, 512, 512, 'M'],
 }
 
 class VGGBNMixed(nn.Module):
-    def __init__(self, num_classes=10, depth=16, lr=0.1, momentum=0.9):
+    def __init__(self, num_classes=10, depth=16, lr=0.1, momentum=0.0, low_precision=True):
         super(VGGBNMixed, self).__init__()
         self.features = make_layers(cfg[depth], lr, momentum)
         self.layers = len(self.features)
@@ -40,7 +40,7 @@ class VGGBNMixed(nn.Module):
         self.model = nn.Sequential(*self.features)
         
         if depth == 7:
-            self.fc = Linear(in_features=256, out_features=num_classes, bias=True, lr=lr, momentum=momentum)
+            self.fc = Linear(in_features=128, out_features=num_classes, bias=True, lr=lr, momentum=momentum, low_precision=low_precision)
         
         self.loss = MSE(num_classes)
 
